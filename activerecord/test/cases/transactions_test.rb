@@ -9,6 +9,7 @@ require "models/book"
 require "models/author"
 require "models/post"
 require "models/movie"
+require "models/category"
 
 class TransactionTest < ActiveRecord::TestCase
   self.use_transactional_tests = false
@@ -75,6 +76,38 @@ class TransactionTest < ActiveRecord::TestCase
 
     assert_equal title_change, topic.saved_changes["title"]
     assert_equal topic.title, topic.reload.title
+  end
+
+  def test_rollback_dirty_changes_on_habtm_new_record_then_retry_save
+    post = Post.create!(title: "Lorem", body: "Content")
+    category = Category.create!(name: "Sports")
+
+    ActiveRecord::Base.transaction do
+      post.categories << category
+      raise ActiveRecord::Rollback
+    end
+
+    post.save
+
+    assert_equal post.categories, [category]
+    assert_equal post.categories.reload, [category]
+  end
+
+  def test_rollback_dirty_changes_on_habtm_delete_record_then_retry_save
+    post = Post.create!(title: "Lorem", body: "Content")
+    category = Category.create!(name: "Sports")
+
+    post.categories << category
+
+    ActiveRecord::Base.transaction do
+      post.categories.delete_all
+      raise ActiveRecord::Rollback
+    end
+
+    post.save
+
+    assert_equal post.categories, []
+    assert_equal post.categories.reload, []
   end
 
   def test_persisted_in_a_model_with_custom_primary_key_after_failed_save
